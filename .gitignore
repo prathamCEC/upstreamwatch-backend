@@ -173,6 +173,8 @@ venv.bak/
 .dmypy.json
 dmypy.json
 
+secrets/
+
 # Pyre type checker
 .pyre/
 
