@@ -72,3 +72,7 @@ def get_installation_repositories():
         }
         for repository in repositories
     ]
+
+def get_repository(full_name):
+    github = get_github_client()
+    return github.get_repo(full_name)
