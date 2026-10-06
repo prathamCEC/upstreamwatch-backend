@@ -76,3 +76,18 @@ def get_installation_repositories():
 def get_repository(full_name):
     github = get_github_client()
     return github.get_repo(full_name)
+
+def get_repository_branch_sha(full_name, branch_name):
+    github_repository = get_repository(full_name)
+
+    branch = github_repository.get_branch(branch_name)
+
+    return branch.commit.sha
+
+def compare_commits(full_name, base_sha, head_sha):
+    github = get_github_client()
+    repository = github.get_repo(full_name)
+
+    comparison = repository.compare(base_sha, head_sha)
+
+    return comparison
