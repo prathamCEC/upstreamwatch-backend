@@ -1,6 +1,6 @@
 from app.extensions import db
-from app.models import Repository
-from app.services.github_service import get_repository
+from app.models import Repository, UpstreamEvent, UpstreamChange
+from app.services.github_service import (get_repository, get_repository_branch_sha,compare_commits,)
 
 
 def monitor_repository(full_name):
@@ -37,3 +37,66 @@ def monitor_repository(full_name):
     db.session.commit()
 
     return repository
+
+def check_upstream(repository):
+    upstream_full_name = repository.upstream_full_name
+
+    if not upstream_full_name:
+        return {
+            "upstream_changed": False,
+            "reason": "Repository has no upstream repository",
+        }
+
+    current_sha = get_repository_branch_sha(
+        upstream_full_name,
+        repository.default_branch,
+    )
+
+    return {
+        "upstream_changed": current_sha != repository.baseline_sha,
+        "baseline_sha": repository.baseline_sha,
+        "current_sha": current_sha,
+    }
+
+def process_upstream_changes(repository):
+    result = check_upstream(repository)
+
+    if not result["upstream_changed"]:
+        return None
+
+    comparison = compare_commits(
+        repository.upstream_full_name,
+        result["baseline_sha"],
+        result["current_sha"],
+    )
+
+    event = UpstreamEvent(
+        repository_id=repository.id,
+        previous_sha=result["baseline_sha"],
+        current_sha=result["current_sha"],
+    )
+
+    db.session.add(event)
+
+    for file in comparison.files:
+        change = UpstreamChange(
+            file_path=file.filename,
+            status=file.status,
+            additions=file.additions,
+            deletions=file.deletions,
+            changes=file.changes,
+        )
+
+        event.changes.append(change)
+
+    repository.baseline_sha = result["current_sha"]
+
+    db.session.commit()
+
+    return {
+        "event_id": event.id,
+        "previous_sha": event.previous_sha,
+        "current_sha": event.current_sha,
+        "total_commits": comparison.total_commits,
+        "files_changed": len(comparison.files),
+    }

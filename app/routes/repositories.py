@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from github import GithubException
 from app.models import Repository
-from app.services.repository_service import monitor_repository
+from app.services.repository_service import (monitor_repository, process_upstream_changes,)
 from app.extensions import db
 
 repositories_bp = Blueprint(
@@ -88,4 +88,33 @@ def get_monitored_repository(repository_id):
             "baseline_sha": repository.baseline_sha,
             "monitoring_enabled": repository.monitoring_enabled,
         }
+    }), 200
+
+@repositories_bp.post("/<int:repository_id>/check-upstream")
+def check_repository_upstream(repository_id):
+    repository = db.session.get(Repository, repository_id)
+
+    if repository is None:
+        return jsonify({
+            "error": "Repository not found",
+        }), 404
+
+    if not repository.monitoring_enabled:
+        return jsonify({
+            "error": "Repository monitoring is disabled",
+        }), 409
+
+    result = process_upstream_changes(repository)
+
+    if result is None:
+        return jsonify({
+            "message": "No new upstream changes detected",
+            "repository_id": repository.id,
+            "baseline_sha": repository.baseline_sha,
+        }), 200
+
+    return jsonify({
+        "message": "New upstream changes detected",
+        "repository_id": repository.id,
+        "event": result,
     }), 200
